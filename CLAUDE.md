@@ -207,6 +207,19 @@ public enum SpeedType {
 - `BigDecimal`을 그대로 직렬화하면 DB scale이 드러난다 (`0.00050`). 정리하려면 `stripTrailingZeros()`를 쓰되
   **scale이 0인 값에는 쓰지 말 것** — `5000`이 `5E+3`으로 나간다.
 
+### 타임존 — 코드에 박지 않는다
+
+날짜·시각은 `LocalDate.now()`처럼 **시스템 기본 타임존을 그대로 쓴다.**
+`ZoneId.of("Asia/Seoul")`을 코드에 박지 않고, 배포 시 컨테이너 `TZ` 환경변수로 맞추는 방식을 택했다
+(로그·JDBC·다른 날짜 필드까지 한 knob으로 일관되게 유지하려는 의도다).
+
+`ReceiveMethod.calculateArrivalDate()`의 `LocalDate.now()`는 **의도된 것이다. 고치지 말 것.**
+
+- 운영: Dockerfile에 `ENV TZ=Asia/Seoul`
+- 테스트를 CI에서 돌릴 때도 `TZ`를 맞춰야 날짜 단정이 깨지지 않는다 (러너 기본값은 보통 UTC).
+  CI 타임존을 못 건드리는 상황이면 그때 `Clock`을 주입해 테스트에서 고정한다.
+- MySQL 서버 타임존도 같이 맞춰야 `LocalDateTime` 왕복에서 값이 밀리지 않는다.
+
 ### Spring Boot 4 주의
 
 의존성 이름이 Boot 3과 다르다 — `spring-boot-starter-webmvc`, `spring-boot-starter-webmvc-test`,
