@@ -1,7 +1,6 @@
 package com.ceos24.mashup2backend.domain.receivemethod.entity;
 
 import com.ceos24.mashup2backend.domain.currency.entity.Currency;
-import com.ceos24.mashup2backend.domain.receivemethod.entity.enums.ArrivalType;
 import com.ceos24.mashup2backend.domain.receivemethod.entity.enums.MethodProvider;
 import com.ceos24.mashup2backend.domain.receivemethod.entity.enums.MethodType;
 import com.ceos24.mashup2backend.domain.receivemethod.entity.enums.SpeedType;
@@ -23,6 +22,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 
 @Entity
 @Getter
@@ -31,7 +32,7 @@ import java.math.BigDecimal;
         name = "receive_method",
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_receive_method",
-                columnNames = {"receive_currency", "method_type", "method_provider", "speedType"}
+                columnNames = {"receive_currency", "method_type", "method_provider", "speed_type"}
         )
 )
 public class ReceiveMethod {
@@ -65,25 +66,12 @@ public class ReceiveMethod {
     private SpeedType speedType;
 
     // 고정 수수료. 보내는 통화(KRW) 기준
-    @Column(nullable = false, precision = 19, scale = 4)
+    @Column(nullable = false, precision = 19)
     private BigDecimal fixedFee;
 
     // 비율 마진 (0.01 = 1%). 적용환율 = base_rate * (1 - rate_margin)
-    @Column(nullable = false, precision = 6, scale = 5)
+    @Column(nullable = false, precision = 6, scale = 3)
     private BigDecimal rateMargin;
-
-    // 소요 시간 유형. arrival_value의 단위를 결정한다
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
-    private ArrivalType arrivalType;
-
-    // 소요 값. IMMEDIATE면 분, BUSINESS_DAY면 영업일 수
-    @Column(nullable = false)
-    private Integer arrivalValue;
-
-    // 모달에 띄우는 고정 문구 (ex. 송금 시간 15분 1일)
-    @Column(nullable = false, length = 100)
-    private String estimatedText;
 
     // 최소 금액
     @Column(nullable = false, precision = 19, scale = 4)
@@ -104,7 +92,6 @@ public class ReceiveMethod {
     @Builder
     private ReceiveMethod(Currency receiveCurrency, MethodType methodType, MethodProvider methodProvider,
                           String methodName, SpeedType speedType, BigDecimal fixedFee, BigDecimal rateMargin,
-                          ArrivalType arrivalType, Integer arrivalValue, String estimatedText,
                           BigDecimal minAmount, BigDecimal maxAmount, String unselectableReason,
                           Boolean isActive) {
         this.receiveCurrency = receiveCurrency;
@@ -114,12 +101,22 @@ public class ReceiveMethod {
         this.speedType = speedType;
         this.fixedFee = fixedFee;
         this.rateMargin = rateMargin;
-        this.arrivalType = arrivalType;
-        this.arrivalValue = arrivalValue;
-        this.estimatedText = estimatedText;
         this.minAmount = minAmount;
         this.maxAmount = maxAmount;
         this.unselectableReason = unselectableReason;
         this.isActive = isActive;
+    }
+
+    // 최종 보내는 금액 (수수료 제외) = 송금 금액(KRW) * 기준 환율 * (1 - 환율 마진)
+    public BigDecimal calculateTotalAmount(BigDecimal sendAmount, BigDecimal baseRate, int decimalPlaces) {
+        return sendAmount
+                .multiply(baseRate)
+                .multiply(BigDecimal.ONE.subtract(rateMargin))
+                .setScale(decimalPlaces, RoundingMode.CEILING);
+    }
+
+    // 도착 예정일. speedType의 가산 일수를 더한다
+    public LocalDate calculateArrivalDate(LocalDate now) {
+        return now.plusDays(speedType.getArrivalDays());
     }
 }
