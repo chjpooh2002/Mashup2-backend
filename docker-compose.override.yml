@@ -1,0 +1,10 @@
+# 로컬 전용 — `docker compose up` 시 docker-compose.yml에 자동으로 합쳐진다.
+# .env의 DB_URL은 bootRun용(localhost)이므로, 컨테이너에서는 호스트 PC의 MySQL을 가리키도록 덮어쓴다.
+# 배포 서버에서는 이 파일을 쓰지 않는다 (`docker compose -f docker-compose.yml ...`).
+services:
+  app:
+    environment:
+      DB_URL: jdbc:mysql://host.docker.internal:3306/mashup2
+    extra_hosts:
+      # Linux 도커 엔진 호환용 (Docker Desktop은 기본 제공)
+      - "host.docker.internal:host-gateway"
