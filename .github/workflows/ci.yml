@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      # 러너 기본값(UTC) 대신 배포 환경과 같은 타임존으로 날짜 단정을 맞춘다
+      TZ: Asia/Seoul
+      # 테스트용 일회성 DB 계정이라 시크릿이 아니다
+      DB_URL: jdbc:mysql://localhost:3306/mashup2
+      DB_USERNAME: mashup2
+      DB_PASSWORD: mashup2
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: mashup2
+          MYSQL_USER: mashup2
+          MYSQL_PASSWORD: mashup2
+          MYSQL_ROOT_PASSWORD: root
+          # 서비스 컨테이너에는 잡 env가 전달되지 않으므로 따로 맞춘다
+          TZ: Asia/Seoul
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 21 설정
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # 그레이들 배포판·의존성 캐시
+      - name: Gradle 설정
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 빌드 및 테스트
+        run: ./gradlew build
+
+      - name: 테스트 리포트 업로드
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
