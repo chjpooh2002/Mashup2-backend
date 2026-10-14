@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    # 로컬은 기본값 이름으로 빌드한다.
+    # 배포 서버는 APP_IMAGE=ghcr.io/chjpooh2002/mashup2-backend:<커밋 해시>를 주고 --no-build로 GHCR 이미지를 받아 쓴다.
+    image: ${APP_IMAGE:-mashup2-backend}
+    container_name: mashup2-backend
+    # DB 접속 정보는 .env에서 환경변수로 주입한다 (이미지에는 .env를 넣지 않는다)
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

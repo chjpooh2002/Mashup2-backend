@@ -1,0 +1,174 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+# 최상위 권한은 비워 두고 잡마다 필요한 것만 준다
+permissions: {}
+
+# 배포가 겹치면 SG 규칙·컨테이너 교체가 꼬이므로 하나씩만 실행한다 (진행 중인 배포는 끊지 않는다)
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # 명시하면 -eo pipefail로 실행되어 파이프 중간 실패도 잡힌다
+    shell: bash
+
+env:
+  # GHCR 저장소 이름은 소문자만 허용된다 (레포 이름 Mashup2-backend를 그대로 쓰지 않는다)
+  IMAGE: ghcr.io/chjpooh2002/mashup2-backend
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Buildx 설정
+        uses: docker/setup-buildx-action@v3
+
+      - name: GHCR 로그인
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 이미지 빌드 및 푸시
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # EC2가 x86_64 인스턴스다
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          # 패키지를 레포에 연결해야 deploy 잡의 GITHUB_TOKEN으로 비공개 이미지를 받을 수 있다
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # environment를 지정하면 OIDC sub가 environment:<이름>으로 바뀌어 main 브랜치 전용 역할을 맡지 못한다
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+      EC2_SG_ID: ${{ secrets.EC2_SG_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: AWS 역할 맡기 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: 러너 IP에 22번 포트 열기
+        id: sg-open
+        run: |
+          RUNNER_IP=$(curl -fsS --retry 3 https://checkip.amazonaws.com | tr -d '[:space:]')
+          RULE_ID=$(aws ec2 authorize-security-group-ingress \
+            --group-id "$EC2_SG_ID" \
+            --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=${RUNNER_IP}/32,Description=github-actions-${GITHUB_RUN_ID}}]" \
+            --query 'SecurityGroupRules[0].SecurityGroupRuleId' \
+            --output text)
+          # 삭제할 때 IP가 아니라 이 규칙 ID로 정확히 지운다
+          echo "rule-id=$RULE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: SSH 접속 준비
+        id: ssh-setup
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > "$RUNNER_TEMP/ec2_key"
+          chmod 600 "$RUNNER_TEMP/ec2_key"
+          cat > ~/.ssh/config <<EOF
+          Host ec2
+            HostName $EC2_HOST
+            User $EC2_USERNAME
+            IdentityFile $RUNNER_TEMP/ec2_key
+            UserKnownHostsFile $RUNNER_TEMP/known_hosts
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+          EOF
+          # SG 규칙이 반영되기까지 몇 초 걸릴 수 있어 호스트 키 수집을 재시도한다
+          for _ in $(seq 1 10); do
+            if ssh-keyscan -T 5 "$EC2_HOST" > "$RUNNER_TEMP/known_hosts" 2>/dev/null \
+              && [ -s "$RUNNER_TEMP/known_hosts" ]; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "EC2 SSH 포트에 연결하지 못했습니다" >&2
+          exit 1
+
+      # override 파일은 로컬 전용이라 보내지 않는다 — 파일 하나만 지정해 복사한다
+      - name: docker-compose.yml 복사
+        run: scp docker-compose.yml ec2:app/docker-compose.yml
+
+      - name: 컨테이너 교체
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # 토큰이 원격 프로세스 인자에 드러나지 않도록 스크립트를 stdin으로 넘긴다
+        run: |
+          # 토큰·이미지 태그는 러너에서 치환해 보내는 것이 의도다
+          # shellcheck disable=SC2087
+          ssh ec2 bash -s <<EOF
+          set -euo pipefail
+          cd ~/app
+          echo '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USER}' --password-stdin
+          # 서버에 레지스트리 자격 증명을 남기지 않는다
+          trap 'docker logout ghcr.io > /dev/null' EXIT
+          export APP_IMAGE='${IMAGE}:${GITHUB_SHA}'
+          docker compose -f docker-compose.yml pull
+          docker compose -f docker-compose.yml up -d --no-build
+          # 사용하지 않는 이미지 중 7일 지난 것만 지운다 (최근 이미지는 롤백용으로 남긴다)
+          docker image prune -af --filter until=168h
+          EOF
+
+      - name: 헬스체크
+        run: |
+          for i in $(seq 1 24); do
+            if curl -fsS --max-time 5 "http://$EC2_HOST:8080/api/health"; then
+              echo
+              echo "헬스체크 성공 (${i}회차)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "헬스체크 실패: 2분 안에 정상 응답이 없습니다" >&2
+          exit 1
+
+      # SG 규칙을 지우기 전에 실행해야 접속할 수 있다
+      - name: 실패 시 컨테이너 로그 출력
+        if: failure() && steps.ssh-setup.outcome == 'success'
+        continue-on-error: true
+        run: ssh ec2 docker logs --tail 200 mashup2-backend
+
+      - name: 22번 포트 규칙 삭제
+        if: always() && steps.sg-open.outputs.rule-id != ''
+        env:
+          RULE_ID: ${{ steps.sg-open.outputs.rule-id }}
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "$EC2_SG_ID" \
+            --security-group-rule-ids "$RULE_ID"

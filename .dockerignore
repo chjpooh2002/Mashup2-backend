@@ -1,0 +1,22 @@
+# 시크릿
+.env
+.env.*
+
+# 빌드 산출물·캐시
+build/
+.gradle/
+out/
+bin/
+
+# VCS·IDE
+.git
+.github/
+.idea/
+*.iml
+.vscode/
+
+# 문서·도커 설정
+*.md
+Dockerfile
+.dockerignore
+docker-compose*.yml
