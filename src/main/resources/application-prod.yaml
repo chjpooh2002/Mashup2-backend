@@ -1,0 +1,19 @@
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false
+
+logging:
+  level:
+    # SQL 로그 끔
+    org.hibernate.SQL: info
+    # 바인딩 파라미터 로그 끔
+    org.hibernate.orm.jdbc.bind: info
+
+# 스웨거는 프론트 연동 기간 동안 일단 켜둔다
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
