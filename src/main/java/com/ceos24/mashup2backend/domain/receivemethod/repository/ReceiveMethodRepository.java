@@ -1,6 +1,8 @@
 package com.ceos24.mashup2backend.domain.receivemethod.repository;
 
 import com.ceos24.mashup2backend.domain.receivemethod.entity.ReceiveMethod;
+import com.ceos24.mashup2backend.domain.receivemethod.entity.enums.MethodProvider;
+import com.ceos24.mashup2backend.domain.receivemethod.entity.enums.MethodType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,4 +23,22 @@ public interface ReceiveMethodRepository extends JpaRepository<ReceiveMethod, Lo
             order by rm.id asc
             """)
     List<ReceiveMethod> findActiveByReceiveCurrency(@Param("receiveCurrency") String receiveCurrency);
+
+    // 받는 방법 하나의 속도별 행 목록. 유니크 키에서 speed_type만 빠진 조건이라 속도 수만큼 나온다.
+    // 응답이 통화 정보를 쓰지 않으므로 fetch join 없이 필터 용도로만 조인한다.
+    // 선택 불가 여부는 서비스에서 거른다 (조합 자체가 없는 경우와 구분해야 하기 때문).
+    @Query("""
+            select rm
+            from ReceiveMethod rm
+            join rm.receiveCurrency c
+            where c.currencyCode = :receiveCurrency
+              and rm.methodType = :methodType
+              and rm.methodProvider = :methodProvider
+              and c.isActive = true
+              and rm.isActive = true
+            order by rm.id asc
+            """)
+    List<ReceiveMethod> findActiveByReceiveCurrencyAndMethod(@Param("receiveCurrency") String receiveCurrency,
+                                                             @Param("methodType") MethodType methodType,
+                                                             @Param("methodProvider") MethodProvider methodProvider);
 }

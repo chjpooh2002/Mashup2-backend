@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 public enum ReceiveOptionSuccessCode implements BaseSuccessCode {
 
     RECEIVE_OPTION_LIST_OK(HttpStatus.OK, "RECEIVE-OPTION200_1", "받는 방법 리스트 조회에 성공하였습니다."),
+    RECEIVE_OPTION_DETAIL_OK(HttpStatus.OK, "RECEIVE-OPTION-DETAIL200_1", "받는 방법 상세 조회에 성공하였습니다."),
     ;
 
     private final HttpStatus status;

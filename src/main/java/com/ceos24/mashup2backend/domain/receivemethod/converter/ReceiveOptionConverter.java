@@ -1,7 +1,9 @@
 package com.ceos24.mashup2backend.domain.receivemethod.converter;
 
 import com.ceos24.mashup2backend.domain.receivemethod.dto.enums.BadgeType;
+import com.ceos24.mashup2backend.domain.receivemethod.dto.response.ReceiveOptionDetailResponse;
 import com.ceos24.mashup2backend.domain.receivemethod.dto.response.ReceiveOptionListResponse;
+import com.ceos24.mashup2backend.domain.receivemethod.dto.response.ReceiveOptionPlanResponse;
 import com.ceos24.mashup2backend.domain.receivemethod.dto.response.ReceiveOptionResponse;
 import com.ceos24.mashup2backend.domain.receivemethod.entity.ReceiveMethod;
 
@@ -52,5 +54,17 @@ public class ReceiveOptionConverter {
                                                            BigDecimal sendAmount,
                                                            List<ReceiveOptionResponse> options) {
         return new ReceiveOptionListResponse(sendCurrency, receiveCurrency, sendAmount, options);
+    }
+
+    // 받는 방법 하나를 속도별 요금제 항목으로 변환한다
+    public static ReceiveOptionPlanResponse toPlanResponse(ReceiveMethod method) {
+        return new ReceiveOptionPlanResponse(
+                method.getSpeedType(),
+                method.getSpeedType().getTransferTime(),
+                method.getFixedFee());
+    }
+
+    public static ReceiveOptionDetailResponse toDetailResponse(List<ReceiveOptionPlanResponse> plans) {
+        return new ReceiveOptionDetailResponse(plans);
     }
 }
