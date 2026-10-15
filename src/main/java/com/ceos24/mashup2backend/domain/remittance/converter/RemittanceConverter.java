@@ -5,12 +5,14 @@ import com.ceos24.mashup2backend.domain.exchangerate.entity.ExchangeRate;
 import com.ceos24.mashup2backend.domain.remittance.dto.response.LatestRemittanceResponse;
 import com.ceos24.mashup2backend.domain.remittance.dto.response.RemittanceAmountResponse;
 import com.ceos24.mashup2backend.domain.remittance.dto.response.RemittanceExchangeRateResponse;
+import com.ceos24.mashup2backend.domain.remittance.dto.response.RemittanceSaveResponse;
+import com.ceos24.mashup2backend.domain.remittance.entity.RecentRemittance;
 
 import java.math.BigDecimal;
 
-public class LatestRemittanceConverter {
+public class RemittanceConverter {
 
-    private LatestRemittanceConverter() {
+    private RemittanceConverter() {
     }
 
     // 보내는 쪽. KRW는 currency 테이블에 없어 코드를 그대로 받는다
@@ -39,6 +41,15 @@ public class LatestRemittanceConverter {
                 krwBased ? receiveCurrencyCode : sendCurrencyCode,
                 exchangeRate.displayRate(),
                 exchangeRate.getBaseTime());
+    }
+
+    // 저장 결과. 금액은 원화 자릿수로 맞춰 서비스에서 넘겨받는다
+    public static RemittanceSaveResponse toSaveResponse(RecentRemittance remittance, BigDecimal sendAmount) {
+        return new RemittanceSaveResponse(
+                remittance.getId(),
+                remittance.getCurrency().getCurrencyCode(),
+                sendAmount,
+                remittance.getSentAt());
     }
 
     public static LatestRemittanceResponse toLatestRemittanceResponse(

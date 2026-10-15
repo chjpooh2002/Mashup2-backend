@@ -59,7 +59,7 @@ domain/
   currency/      Currency + CurrencyRepository
   exchangerate/  ExchangeRate + Open Exchange Rates 연동 환율 갱신 (클라이언트·서비스·prod 스케줄러)
   receivemethod/ 수취 옵션 조회 API — 전체 레이어가 구현된 기준 도메인
-  remittance/    RecentRemittance (엔티티만)
+  remittance/    최근 송금 이력 조회·저장 API (프로젝트의 유일한 쓰기 API)
 ```
 
 도메인 패키지 레이어는 `receivemethod`를 기준으로 삼는다.
@@ -103,6 +103,30 @@ public ApiResponse<Void> healthCheck() {
 
 - 결과 데이터가 있으면 `ApiResponse.onSuccess(code, result)`, 없으면 `ApiResponse.onSuccess(code)`.
 - `ApiResponse`의 생성자는 `@RequiredArgsConstructor`로 막혀 있으니 정적 팩토리만 사용한다.
+
+**예외 — 200이 아닌 상태를 내리는 API는 `ResponseEntity<ApiResponse<T>>`로 감싼다.**
+`ApiResponse`를 그대로 반환하면 **성공 코드의 `status`가 응답에 반영되지 않는다**
+(에러는 `GeneralExceptionHandler`가 `status`를 꺼내 쓰지만 성공 경로에는 그런 지점이 없다).
+그대로 두면 body는 `REMITTANCE201_1`인데 HTTP 상태는 200으로 나간다.
+
+```java
+// 상태는 HttpStatus 상수를 박지 않고 성공 코드의 status에서 읽는다 (body의 code와 어긋날 수 없다).
+// @ResponseStatus는 OpenAPI 문서용이다 — 없으면 springdoc이 응답을 200으로 적어 실제 상태와 문서가 어긋난다
+@ResponseStatus(HttpStatus.CREATED)
+@PostMapping
+public ResponseEntity<ApiResponse<RemittanceSaveResponse>> saveRemittance(
+        @Valid @RequestBody RemittanceSaveRequest request) {
+
+    RemittanceSuccessCode successCode = RemittanceSuccessCode.REMITTANCE_SAVED;
+
+    return ResponseEntity.status(successCode.getStatus())
+            .body(ApiResponse.onSuccess(successCode, remittanceService.saveRemittance(request)));
+}
+```
+
+`ApiResponse`에 `ResponseEntity`를 만들어주는 팩토리를 **두지 않는다.** 쓰기 API가 하나뿐이라
+공통 파일을 건드리지 않고 컨트롤러에서 조립한다. 조회 API는 전부 200이라 계속 `ApiResponse<T>`를
+직접 반환하며, 현재 `ResponseEntity`를 쓰는 곳은 `POST /api/v1/remittances` 하나뿐이다.
 
 ### 에러/성공 코드 체계
 
