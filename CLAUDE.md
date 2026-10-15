@@ -36,10 +36,15 @@ Windows에서는 `./gradlew` 대신 `gradlew`를 사용한다.
 DB_URL=jdbc:mysql://localhost:3306/<db>
 DB_USERNAME=<user>
 DB_PASSWORD=<password>
+OPEN_EXCHANGE_RATES_APP_ID=<앱 키>
 ```
+
+`OPEN_EXCHANGE_RATES_APP_ID`는 빈 기본값이 있어 없어도 기동·테스트는 된다. 비어 있으면 환율 갱신이 경고 로그만 남기고 건너뛴다.
 
 로컬 개발 기준 설정 — `ddl-auto: update`(마이그레이션 도구 없음, 엔티티 변경이 곧 스키마 변경),
 `open-in-view: false`, `default_batch_fetch_size: 100`, SQL 로깅(debug).
+통화 초기 데이터는 `src/main/resources/data.sql`(`INSERT IGNORE`)이 기동마다 넣는다
+(`sql.init.mode: always` + `defer-datasource-initialization: true`로 테이블 생성 이후 실행). 이미 있는 행은 덮어쓰지 않는다.
 
 ## 아키텍처
 
@@ -48,11 +53,11 @@ DB_PASSWORD=<password>
 ```
 global/          공통 인프라 (응답 형식, 예외 처리, 설정)
   apipayload/    ApiResponse + 코드 체계 + 예외 + 핸들러
-  config/        SwaggerConfig
+  config/        SwaggerConfig, SchedulingConfig (prod 전용 @EnableScheduling)
   healthcheck/   HealthCheckController
 domain/
   currency/      Currency + CurrencyRepository
-  exchangerate/  ExchangeRate + ExchangeRateRepository
+  exchangerate/  ExchangeRate + Open Exchange Rates 연동 환율 갱신 (클라이언트·서비스·prod 스케줄러)
   receivemethod/ 수취 옵션 조회 API — 전체 레이어가 구현된 기준 도메인
   remittance/    RecentRemittance (엔티티만)
 ```
@@ -72,7 +77,14 @@ domain/<도메인>/
   entity/enums/    엔티티 컬럼에 매핑되는 enum
   exception/       도메인 예외
   exception/code/  도메인 성공·에러 코드 enum
+  client/          외부 API 호출 클라이언트 (client/dto/에 외부 응답 DTO record)
+  scheduler/       @Scheduled 진입점. @Profile("prod")로 운영에서만 빈 등록, 로직은 서비스에 위임
 ```
+
+`exchangerate`의 환율 갱신은 외부 호출을 트랜잭션 밖(`ExchangeRateSyncService`)에서 하고,
+검증을 마친 값만 `ExchangeRateService.saveRates`의 단일 트랜잭션으로 저장한다.
+호출 실패·응답 이상이면 기존 값을 유지하고 로그만 남기며, 무료 플랜 호출 한도(월 1,000회) 때문에 재시도하지 않는다.
+클라이언트 예외 메시지에는 앱 키가 담긴 URL이 들어가므로 로그에 메시지를 그대로 남기지 않는다.
 
 enum은 영속화 여부로 가른다 — 컬럼에 매핑되면 `entity/enums/`, 요청·응답에서만 쓰면 `dto/enums/`.
 도메인 API 경로는 `/api/v1/<리소스>`를 쓴다 (`global`의 헬스체크만 `/api/health`).

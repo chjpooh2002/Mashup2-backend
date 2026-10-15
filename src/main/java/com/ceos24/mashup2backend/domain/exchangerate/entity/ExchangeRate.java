@@ -53,4 +53,11 @@ public class ExchangeRate {
         this.baseTime = baseTime;
         this.updatedAt = updatedAt;
     }
+
+    // 새로 받은 환율로 갱신한다
+    public void refresh(BigDecimal baseRate, LocalDateTime baseTime, LocalDateTime updatedAt) {
+        this.baseRate = baseRate;
+        this.baseTime = baseTime;
+        this.updatedAt = updatedAt;
+    }
 }
