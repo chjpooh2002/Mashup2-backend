@@ -15,6 +15,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 @Entity
@@ -22,6 +23,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "exchange_rate")
 public class ExchangeRate {
+
+    // 화면 표시용 환율 소수 자릿수. 어느 방향으로 표시하든 2자리로 맞춘다
+    private static final int DISPLAY_SCALE = 2;
 
     // 통화 코드. currency와 PK를 공유한다 (@MapsId)
     @Id
@@ -59,5 +63,28 @@ public class ExchangeRate {
         this.baseRate = baseRate;
         this.baseTime = baseTime;
         this.updatedAt = updatedAt;
+    }
+
+    // 원화 송금액을 받는 통화로 환산한다. 수수료와 환율 마진은 반영하지 않는다
+    public BigDecimal convertFromKrw(BigDecimal krwAmount, int decimalPlaces) {
+        return krwAmount
+                .multiply(baseRate)
+                .setScale(decimalPlaces, RoundingMode.HALF_UP);
+    }
+
+    // 원화 기준(1원 = N)으로 표시할지 여부.
+    // 1원당 값이 1보다 작으면 0.00094처럼 읽히지 않아 방향을 뒤집는다 (ex. SGD)
+    public boolean isKrwBasedDisplay() {
+        return baseRate.compareTo(BigDecimal.ONE) >= 0;
+    }
+
+    // 표시용 환율. 원화 기준이면 baseRate, 방향을 뒤집으면 1 / baseRate.
+    // 환산에는 쓰지 않는다 — 반올림한 값으로 역산하면 금액이 틀어진다
+    public BigDecimal displayRate() {
+        if (isKrwBasedDisplay()) {
+            return baseRate.setScale(DISPLAY_SCALE, RoundingMode.HALF_UP);
+        }
+        // scale을 지정하지 않으면 무한소수에서 ArithmeticException이 난다
+        return BigDecimal.ONE.divide(baseRate, DISPLAY_SCALE, RoundingMode.HALF_UP);
     }
 }

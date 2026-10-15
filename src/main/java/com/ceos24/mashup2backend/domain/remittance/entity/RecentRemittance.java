@@ -28,7 +28,7 @@ public class RecentRemittance { // 송금이력
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 보낸 통화
+    // 받는 통화 (송금 목적지). 보내는 통화는 KRW로 고정이고 sendAmount가 원화 금액이다
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "currency_code")
     private Currency currency;
