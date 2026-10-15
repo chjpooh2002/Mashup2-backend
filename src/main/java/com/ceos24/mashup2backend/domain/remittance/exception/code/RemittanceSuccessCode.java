@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 public enum RemittanceSuccessCode implements BaseSuccessCode {
 
     LATEST_REMITTANCE_OK(HttpStatus.OK, "REMITTANCE200_1", "송금 이력 조회에 성공하였습니다."),
+    REMITTANCE_SAVED(HttpStatus.CREATED, "REMITTANCE201_1", "송금 이력 저장에 성공하였습니다."),
     ;
 
     private final HttpStatus status;
