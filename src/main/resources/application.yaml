@@ -10,6 +10,12 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+  # data.sql로 통화 초기 데이터를 넣는다. 테이블 생성(ddl-auto) 이후에 실행되도록 지연한다
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -18,6 +24,7 @@ spring:
         format_sql: true
         default_batch_fetch_size: 100
     open-in-view: false
+    defer-datasource-initialization: true
 
 logging:
   level:
