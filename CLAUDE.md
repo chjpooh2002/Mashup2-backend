@@ -110,17 +110,23 @@ public ApiResponse<Void> healthCheck() {
 그대로 두면 body는 `REMITTANCE201_1`인데 HTTP 상태는 200으로 나간다.
 
 ```java
-// 상태 코드를 컨트롤러에 박지 않고 성공 코드 enum의 status에서 가져온다
+// 상태는 HttpStatus 상수를 박지 않고 성공 코드의 status에서 읽는다 (body의 code와 어긋날 수 없다).
+// @ResponseStatus는 OpenAPI 문서용이다 — 없으면 springdoc이 응답을 200으로 적어 실제 상태와 문서가 어긋난다
+@ResponseStatus(HttpStatus.CREATED)
 @PostMapping
 public ResponseEntity<ApiResponse<RemittanceSaveResponse>> saveRemittance(
         @Valid @RequestBody RemittanceSaveRequest request) {
-    return ApiResponse.onSuccessEntity(
-            RemittanceSuccessCode.REMITTANCE_SAVED, remittanceService.saveRemittance(request));
+
+    RemittanceSuccessCode successCode = RemittanceSuccessCode.REMITTANCE_SAVED;
+
+    return ResponseEntity.status(successCode.getStatus())
+            .body(ApiResponse.onSuccess(successCode, remittanceService.saveRemittance(request)));
 }
 ```
 
-조회 API는 전부 200이라 계속 `ApiResponse<T>`를 직접 반환한다. 현재 `ResponseEntity`를 쓰는 곳은
-`POST /api/v1/remittances` 하나뿐이다.
+`ApiResponse`에 `ResponseEntity`를 만들어주는 팩토리를 **두지 않는다.** 쓰기 API가 하나뿐이라
+공통 파일을 건드리지 않고 컨트롤러에서 조립한다. 조회 API는 전부 200이라 계속 `ApiResponse<T>`를
+직접 반환하며, 현재 `ResponseEntity`를 쓰는 곳은 `POST /api/v1/remittances` 하나뿐이다.
 
 ### 에러/성공 코드 체계
 
