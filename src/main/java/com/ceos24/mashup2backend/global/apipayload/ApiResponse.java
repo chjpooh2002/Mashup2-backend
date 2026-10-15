@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 
 @Getter
 @RequiredArgsConstructor
@@ -33,17 +32,6 @@ public class ApiResponse<T> {
     // 결과 데이터가 없는 성공 응답용 오버로딩 메서드
     public static ApiResponse<Void> onSuccess(BaseSuccessCode code){
         return new ApiResponse<>(true, code.getCode(), code.getMessage(), null);
-    }
-
-    // 200이 아닌 상태 코드를 내려야 하는 성공 응답용 (ex. 201 Created).
-    // 상태를 컨트롤러에 박지 않고 성공 코드 enum의 status에서 가져온다
-    public static <T> ResponseEntity<ApiResponse<T>> onSuccessEntity(BaseSuccessCode code, T result){
-        return ResponseEntity.status(code.getStatus()).body(onSuccess(code, result));
-    }
-
-    // 결과 데이터가 없는, 200이 아닌 성공 응답용 오버로딩 메서드
-    public static ResponseEntity<ApiResponse<Void>> onSuccessEntity(BaseSuccessCode code){
-        return ResponseEntity.status(code.getStatus()).body(onSuccess(code));
     }
 
     // 결과 데이터가 있는 실패 응답용 오버로딩 메서드

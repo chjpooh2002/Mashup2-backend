@@ -51,17 +51,14 @@ public class RemittanceController {
                     폼 제출마다 행이 추가되므로 같은 요청을 두 번 보내면 두 건이 쌓인다.
                     유저는 1로 고정이고 보낸 시각은 서버가 채운다.
                     """)
-    // @ResponseStatus는 OpenAPI 문서용이다. 없으면 springdoc이 응답을 200으로 적어
-    // 실제 상태(201)와 문서가 어긋난다. 런타임 상태는 아래 ResponseEntity가 성공 코드에서 가져온다
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping
     public ResponseEntity<ApiResponse<RemittanceSaveResponse>> saveRemittance(
             @Valid @RequestBody RemittanceSaveRequest request) {
 
-        // 201을 실제로 내려야 해서 이 엔드포인트만 ResponseEntity로 감싼다.
-        // ApiResponse를 그대로 반환하면 성공 코드의 status가 응답에 반영되지 않는다
-        return ApiResponse.onSuccessEntity(
-                RemittanceSuccessCode.REMITTANCE_SAVED,
-                remittanceService.saveRemittance(request));
+        RemittanceSuccessCode successCode = RemittanceSuccessCode.REMITTANCE_SAVED;
+
+        return ResponseEntity.status(successCode.getStatus())
+                .body(ApiResponse.onSuccess(successCode, remittanceService.saveRemittance(request)));
     }
 }
