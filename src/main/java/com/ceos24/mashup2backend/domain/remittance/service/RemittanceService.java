@@ -53,6 +53,13 @@ public class RemittanceService {
      */
     public LatestRemittanceResponse getLatestRemittance() {
 
+        // flatMap
+        // i) findFirstByUserIdOrderBySentAtDescIdDesc가 비어있다면 -> toQuote을 호출하지 않고 Optional.empty() 반환
+        // ii) 값이 있다면 -> toQuote(remittance)의 결과(Optional<Quote>)를 그대로 반환
+
+        // map
+        // i) 값이 없다면 -> 람다를 호출하지 않고 Optional.empty() 반환
+        // ii) 값이 있다면 -> toResponse(true, quote) 결과를 Optional로 감싸서 반환
         return recentRemittanceRepository.findFirstByUserIdOrderBySentAtDescIdDesc(FIXED_USER_ID)
                 .flatMap(this::toQuote)
                 .map(quote -> toResponse(true, quote))
@@ -83,17 +90,19 @@ public class RemittanceService {
         return RemittanceConverter.toSaveResponse(saved, toSendAmount(request.sendAmount()));
     }
 
-    // 이력의 받는 통화가 비활성이거나 환율이 없으면 비어 있다 (기본값 폴백 대상)
+    // 최근 송금 이력이 존재하지만, 이력의 받는 통화가 비활성이거나 환율이 없으면 비어 있다 (기본값 폴백 대상)
     private Optional<Quote> toQuote(RecentRemittance remittance) {
 
         Currency receiveCurrency = remittance.getCurrency();
         String receiveCurrencyCode = receiveCurrency.getCurrencyCode();
 
+        // 받는 통화가 비활성이라면, Optional.emtpy() 반환
         if (!receiveCurrency.getIsActive()) {
             log.warn("최근 송금 이력의 받는 통화({})가 비활성이라 기본값으로 응답한다", receiveCurrencyCode);
             return Optional.empty();
         }
 
+        // 받는 통화의 환율 정보가 없다면, Optional.empty() 반환
         Optional<ExchangeRate> exchangeRate = exchangeRateRepository.findById(receiveCurrencyCode);
         if (exchangeRate.isEmpty()) {
             log.warn("최근 송금 이력의 받는 통화({}) 환율이 없어 기본값으로 응답한다", receiveCurrencyCode);
@@ -103,7 +112,7 @@ public class RemittanceService {
         return Optional.of(new Quote(receiveCurrency, exchangeRate.get(), remittance.getSendAmount()));
     }
 
-    // 기본값(VND)마저 없으면 더 이상 폴백할 곳이 없어 서버 데이터 정합성 문제로 본다
+    // 최근 송금 이력이 없다면, 받는 통화는 VND와 송금 금액은 10,000KRW 기준으로 한다.
     private Quote defaultQuote() {
 
         Currency receiveCurrency = currencyRepository
@@ -116,6 +125,7 @@ public class RemittanceService {
         return new Quote(receiveCurrency, exchangeRate, DEFAULT_SEND_AMOUNT);
     }
 
+    // LatestRemittanceResponse을 생성한다.
     private LatestRemittanceResponse toResponse(boolean hasHistory, Quote quote) {
 
         // 받는 금액은 표시용 환율이 아니라 baseRate로 계산한다. 반올림한 표시 환율로 역산하면 금액이 틀어진다
