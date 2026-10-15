@@ -6,8 +6,11 @@ import com.ceos24.mashup2backend.domain.exchangerate.entity.ExchangeRate;
 import com.ceos24.mashup2backend.domain.exchangerate.repository.ExchangeRateRepository;
 import com.ceos24.mashup2backend.domain.receivemethod.converter.ReceiveOptionConverter;
 import com.ceos24.mashup2backend.domain.receivemethod.dto.enums.SortType;
+import com.ceos24.mashup2backend.domain.receivemethod.dto.request.ReceiveOptionDetailRequest;
 import com.ceos24.mashup2backend.domain.receivemethod.dto.request.ReceiveOptionRequest;
+import com.ceos24.mashup2backend.domain.receivemethod.dto.response.ReceiveOptionDetailResponse;
 import com.ceos24.mashup2backend.domain.receivemethod.dto.response.ReceiveOptionListResponse;
+import com.ceos24.mashup2backend.domain.receivemethod.dto.response.ReceiveOptionPlanResponse;
 import com.ceos24.mashup2backend.domain.receivemethod.dto.response.ReceiveOptionResponse;
 import com.ceos24.mashup2backend.domain.receivemethod.entity.ReceiveMethod;
 import com.ceos24.mashup2backend.domain.receivemethod.exception.ReceiveOptionException;
@@ -91,6 +94,37 @@ public class ReceiveOptionService {
                 receiveCurrency.getCurrencyCode(),
                 request.amount(),
                 options);
+    }
+
+    /***
+     * 함수 기능: 받는 방법 하나의 속도별 요금제를 조회한다.
+     * @param request ReceiveOptionDetailRequest (받는 통화, 받는 방법, 제공사)
+     * @return ReceiveOptionDetailResponse
+     */
+    public ReceiveOptionDetailResponse getReceiveOptionDetail(ReceiveOptionDetailRequest request) {
+
+        // 없는 통화와 비활성 통화를 같은 에러로 처리한다
+        Currency receiveCurrency = currencyRepository.findByCurrencyCodeAndIsActiveTrue(request.receiveCurrency())
+                .orElseThrow(() -> new ReceiveOptionException(ReceiveOptionErrorCode.RECEIVE_CURRENCY_NOT_FOUND));
+
+        List<ReceiveMethod> methods = receiveMethodRepository.findActiveByReceiveCurrencyAndMethod(
+                receiveCurrency.getCurrencyCode(), request.methodType(), request.methodProvider());
+
+        // 조합 자체가 없는 경우와 조합은 있으나 전부 선택 불가인 경우를 구분한다.
+        // 전자는 잘못된 요청이라 404, 후자는 빈 plans로 200을 내려준다.
+        if (methods.isEmpty()) {
+            throw new ReceiveOptionException(ReceiveOptionErrorCode.RECEIVE_METHOD_NOT_FOUND);
+        }
+
+        // 속도가 빠른 순. 조회가 id 오름차순이고 List.sort가 안정 정렬이라 동률은 id 순서가 유지된다
+        List<ReceiveOptionPlanResponse> plans = methods.stream()
+                .filter(method -> method.getUnselectableReason() == null)
+                .sorted(Comparator.comparingInt(
+                        (ReceiveMethod method) -> method.getSpeedType().getArrivalDays()))
+                .map(ReceiveOptionConverter::toPlanResponse)
+                .toList();
+
+        return ReceiveOptionConverter.toDetailResponse(plans);
     }
 
     // 1차 정렬 키. 2차 키(id 오름차순)는 안정 정렬로 보장된다
