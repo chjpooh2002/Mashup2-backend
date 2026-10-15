@@ -1,6 +1,8 @@
 package com.ceos24.mashup2backend.domain.receivemethod.controller;
 
+import com.ceos24.mashup2backend.domain.receivemethod.dto.request.ReceiveOptionDetailRequest;
 import com.ceos24.mashup2backend.domain.receivemethod.dto.request.ReceiveOptionRequest;
+import com.ceos24.mashup2backend.domain.receivemethod.dto.response.ReceiveOptionDetailResponse;
 import com.ceos24.mashup2backend.domain.receivemethod.dto.response.ReceiveOptionListResponse;
 import com.ceos24.mashup2backend.domain.receivemethod.exception.code.ReceiveOptionSuccessCode;
 import com.ceos24.mashup2backend.domain.receivemethod.service.ReceiveOptionService;
@@ -18,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/receive-options")
 @RequiredArgsConstructor
-@Tag(name = "수취 옵션", description = "받는 방법 리스트 조회")
+@Tag(name = "수취 옵션", description = "받는 방법 리스트 조회 및 상세 조회")
 public class ReceiveOptionController {
 
     private final ReceiveOptionService receiveOptionService;
@@ -37,5 +39,21 @@ public class ReceiveOptionController {
         return ApiResponse.onSuccess(
                 ReceiveOptionSuccessCode.RECEIVE_OPTION_LIST_OK,
                 receiveOptionService.getReceiveOptions(request));
+    }
+
+    @Operation(
+            summary = "받는 방법 상세 조회",
+            description = """
+                    받는 통화·받는 방법·제공사로 특정되는 수취 수단의 속도별 요금제를 조회한다.
+                    제공사가 없는 수단(은행, 페이나우 등)은 methodProvider에 NONE을 보낸다.
+                    요금제는 속도가 빠른 순으로 정렬되며, 선택 불가 옵션은 제외된다.
+                    """)
+    @GetMapping("/details")
+    public ApiResponse<ReceiveOptionDetailResponse> getReceiveOptionDetail(
+            @ParameterObject @Valid @ModelAttribute ReceiveOptionDetailRequest request) {
+
+        return ApiResponse.onSuccess(
+                ReceiveOptionSuccessCode.RECEIVE_OPTION_DETAIL_OK,
+                receiveOptionService.getReceiveOptionDetail(request));
     }
 }
