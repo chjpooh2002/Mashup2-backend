@@ -22,6 +22,7 @@ Windows에서는 `./gradlew` 대신 `gradlew`를 사용한다.
 - Swagger UI: `http://localhost:8080/swagger-ui/index.html`
 - Health check: `curl http://localhost:8080/api/health`
 - 수취 옵션 조회: `curl "http://localhost:8080/api/v1/receive-options?sendCurrency=KRW&receiveCurrency=VND&amount=1000000"`
+- 환율 조회: `curl "http://localhost:8080/api/v1/exchange-rates?sendCurrency=KRW&receiveCurrency=VND"`
 - 테스트 실패 리포트: `build/reports/tests/test/index.html`
 
 ### DataSource 필수
@@ -57,7 +58,7 @@ global/          공통 인프라 (응답 형식, 예외 처리, 설정)
   healthcheck/   HealthCheckController
 domain/
   currency/      Currency + CurrencyRepository
-  exchangerate/  ExchangeRate + Open Exchange Rates 연동 환율 갱신 (클라이언트·서비스·prod 스케줄러)
+  exchangerate/  ExchangeRate + Open Exchange Rates 연동 환율 갱신 (클라이언트·서비스·prod 스케줄러) + 환율 조회 API
   receivemethod/ 수취 옵션 조회 API — 전체 레이어가 구현된 기준 도메인
   remittance/    최근 송금 이력 조회·저장 API (프로젝트의 유일한 쓰기 API)
 ```
@@ -85,6 +86,11 @@ domain/<도메인>/
 검증을 마친 값만 `ExchangeRateService.saveRates`의 단일 트랜잭션으로 저장한다.
 호출 실패·응답 이상이면 기존 값을 유지하고 로그만 남기며, 무료 플랜 호출 한도(월 1,000회) 때문에 재시도하지 않는다.
 클라이언트 예외 메시지에는 앱 키가 담긴 URL이 들어가므로 로그에 메시지를 그대로 남기지 않는다.
+
+환율 조회 API(`GET /api/v1/exchange-rates`)는 저장용 `ExchangeRateService`에 넣지 않고
+`ExchangeRateQueryService`(클래스 레벨 `readOnly`)로 분리했다 — 역할은 Sync=외부 호출, Service=저장, QueryService=조회.
+`exchange_rate`만 읽고 외부 API는 호출하지 않는다. 표시 방향·표시용 환율은 `ExchangeRate.isKrwBasedDisplay()` /
+`displayRate()`가 정하고, 응답은 `/api/v1/remittances/latest`의 `exchangeRate` 블록과 같은 모양이다.
 
 enum은 영속화 여부로 가른다 — 컬럼에 매핑되면 `entity/enums/`, 요청·응답에서만 쓰면 `dto/enums/`.
 도메인 API 경로는 `/api/v1/<리소스>`를 쓴다 (`global`의 헬스체크만 `/api/health`).
